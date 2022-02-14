@@ -28,8 +28,6 @@ func Parse(path string) (MetaData, error) {
 
 	bounds := decoded.Bounds()
 
-	data := MetaData{}
-	data.Type = imgType
 	return MetaData{
 		Width:  uint(bounds.Dx()),
 		Height: uint(bounds.Dy()),

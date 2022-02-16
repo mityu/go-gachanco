@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-pdf/fpdf"
@@ -196,36 +197,78 @@ func BuildPDF(resource Resource) error {
 		return err
 	}
 
-	pdf := fpdf.New("P", "mm", "A4", "")
-	for _, file := range resource.Infiles {
-		metadata, err := imgmeta.Parse(file)
-		if err != nil {
-			if resource.Option.ExcludeInvalidFiles {
-				fmt.Println(
-					"Error happens while extracting metadata:", err, "\n",
-					"    Excluded:", file)
-				continue
-			} else {
-				return err
+	type ImgOpt struct {
+		x float64
+		y float64
+		w float64
+		h float64
+		f string
+		t string
+	}
+
+	filesCount := len(resource.Infiles)
+	imgOpts := make([]ImgOpt, filesCount, filesCount)
+	errChan := make(chan error, filesCount)
+	var wg sync.WaitGroup
+	for i, file := range resource.Infiles {
+		wg.Add(1)
+		go func(file string, dest *ImgOpt) {
+			defer wg.Done()
+			m, err := imgmeta.Parse(file)
+			if err != nil {
+				if resource.Option.ExcludeInvalidFiles {
+					fmt.Println(
+						"Error happens while extracting metadata:", err, "\n",
+						"    Excluded:", file)
+				} else {
+					errChan <- err
+				}
+				return
+			}
+
+			w, h := A4WidthMM, A4WidthMM
+			scaleX := A4WidthMM / float64(m.Width)
+			scaleY := A4HeightMM / float64(m.Height)
+
+			if scaleX < scaleY {
+				h = scaleX * float64(m.Height)
+			} else if scaleY < scaleX {
+				w = scaleY * float64(m.Width)
+			}
+
+			x := (A4WidthMM - w) / 2
+			y := (A4HeightMM - h) / 2
+
+			*dest = ImgOpt{
+				x: x,
+				y: y,
+				w: w,
+				h: h,
+				t: m.Type,
+				f: file,
+			}
+		}(file, &imgOpts[i])
+	}
+	wg.Wait()
+	close(errChan)
+
+	if !resource.Option.ExcludeInvalidFiles {
+		for err := range errChan {
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return errors.New("Error happened while extracting metadata.")
 			}
 		}
+	}
 
-		w, h := A4WidthMM, A4WidthMM
-		scaleX := A4WidthMM / float64(metadata.Width)
-		scaleY := A4HeightMM / float64(metadata.Height)
-
-		if scaleX < scaleY {
-			h = scaleX * float64(metadata.Height)
-		} else if scaleY < scaleX {
-			w = scaleY * float64(metadata.Width)
+	pdf := fpdf.New("P", "mm", "A4", "")
+	for _, o := range imgOpts {
+		if o.f == "" { // Skip errored file
+			continue
 		}
-
-		x := (A4WidthMM - w) / 2
-		y := (A4HeightMM - h) / 2
-
 		pdf.AddPage()
-		pdf.ImageOptions(file, x, y, w, h, false, fpdf.ImageOptions{
-			ImageType:             metadata.Type,
+		pdf.ImageOptions(o.f, o.x, o.y, o.w, o.h, false, fpdf.ImageOptions{
+			ImageType:             o.t,
 			ReadDpi:               true,
 			AllowNegativePosition: false,
 		}, 0, "")

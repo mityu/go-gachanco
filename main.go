@@ -273,7 +273,11 @@ func BuildPDF(resource Resource) error {
 			AllowNegativePosition: false,
 		}, 0, "")
 	}
-	return pdf.OutputFileAndClose(resource.Outfile)
+	if err := pdf.OutputFileAndClose(resource.Outfile); err != nil {
+		return err
+	}
+	fmt.Println("Successfully generated:", resource.Outfile)
+	return nil
 }
 
 func run() error {

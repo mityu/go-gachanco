@@ -3,7 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"gachanco/imgmeta"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,7 +217,11 @@ func BuildPDF(resource Resource) error {
 		wg.Add(1)
 		go func(file string, dest *ImgOpt) {
 			defer wg.Done()
-			m, err := imgmeta.Parse(file)
+			f, err := os.Open(file)
+			if err != nil {
+				errChan <- err
+			}
+			c, imgtype, err := image.DecodeConfig(f)
 			if err != nil {
 				if resource.Option.ExcludeInvalidFiles {
 					fmt.Println(
@@ -227,13 +234,13 @@ func BuildPDF(resource Resource) error {
 			}
 
 			w, h := A4WidthMM, A4WidthMM
-			scaleX := A4WidthMM / float64(m.Width)
-			scaleY := A4HeightMM / float64(m.Height)
+			scaleX := A4WidthMM / float64(c.Width)
+			scaleY := A4HeightMM / float64(c.Height)
 
 			if scaleX < scaleY {
-				h = scaleX * float64(m.Height)
+				h = scaleX * float64(c.Height)
 			} else if scaleY < scaleX {
-				w = scaleY * float64(m.Width)
+				w = scaleY * float64(c.Width)
 			}
 
 			x := (A4WidthMM - w) / 2
@@ -244,7 +251,7 @@ func BuildPDF(resource Resource) error {
 				y: y,
 				w: w,
 				h: h,
-				t: m.Type,
+				t: imgtype,
 				f: file,
 			}
 		}(file, &imgOpts[i])

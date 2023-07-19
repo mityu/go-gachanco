@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	KindFile = 0
-	KindDir  = 1
+	KindFile = iota
+	KindDir
 )
 
 const (

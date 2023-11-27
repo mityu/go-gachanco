@@ -40,7 +40,7 @@ type Resource struct {
 
 func getUsage() string {
 	return strings.Join([]string{
-		"Usage: gacha2pdf files|dirs",
+		"Usage: gachanco files|dirs",
 		"        [<flags>] [-o <output file>] <target1> [,<target2>, [...]]",
 		"",
 		"    file(s)    Make PDF from specified files.",
